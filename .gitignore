@@ -26,3 +26,5 @@ Archive/
 # scratch run captures
 /run_screenshot*.png
 env.sh
+/red_shot*.png
+/red_hero.png

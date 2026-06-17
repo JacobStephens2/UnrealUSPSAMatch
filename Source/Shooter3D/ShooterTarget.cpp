@@ -1,7 +1,7 @@
 #include "ShooterTarget.h"
 #include "ShooterGameMode.h"
 #include "Components/StaticMeshComponent.h"
-#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -17,6 +17,15 @@ AShooterTarget::AShooterTarget()
 	{
 		Mesh->SetStaticMesh(CubeMesh.Object);
 	}
+
+	// Red material (the engine's BasicShapeMaterial has no color slot, so we use
+	// our own /Game/Materials/M_Target created with the material-authoring script).
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> RedMat(TEXT("/Game/Materials/M_Target.M_Target"));
+	if (RedMat.Succeeded())
+	{
+		Mesh->SetMaterial(0, RedMat.Object);
+	}
+
 	RootComponent = Mesh;
 }
 
@@ -24,16 +33,6 @@ void AShooterTarget::BeginPlay()
 {
 	Super::BeginPlay();
 	ArenaCenter = FVector(0.f, 0.f, 100.f);
-
-	// Tint the target red so it stands out against the grey floor.
-	if (UMaterialInterface* Base = Mesh->GetMaterial(0))
-	{
-		UMaterialInstanceDynamic* Dyn = Mesh->CreateAndSetMaterialInstanceDynamic(0);
-		if (Dyn)
-		{
-			Dyn->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.9f, 0.1f, 0.1f));
-		}
-	}
 }
 
 void AShooterTarget::OnShot()
