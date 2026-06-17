@@ -19,7 +19,13 @@ public:
 	/** Launch the projectile along the given direction. */
 	void FireInDirection(const FVector& ShootDirection);
 
+	/** Mark this as an enemy shot that damages the player instead of scoring a target. */
+	void ConfigureAsEnemyShot(int32 InDamage);
+
 protected:
+	bool bEnemyShot = false;
+	int32 Damage = 0;
+
 	UPROPERTY(VisibleAnywhere)
 	USphereComponent* Collision;
 

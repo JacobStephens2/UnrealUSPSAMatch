@@ -65,6 +65,29 @@ void AShooterGameMode::StartStage()
 		return;
 	}
 
+	if (State == EStageState::Complete)
+	{
+		if (bFailed)
+		{
+			BuildStage(CurrentStage);          // retry the same stage
+		}
+		else if (CurrentStage < NumStages - 1)
+		{
+			BuildStage(++CurrentStage);        // advance to the next stage
+		}
+		else
+		{
+			CurrentStage = 0;
+			BuildStage(0);                     // new match
+		}
+		return; // now in PreStart for the (re)built stage — press again to run
+	}
+
+	BeginRun(); // PreStart -> run the current stage
+}
+
+void AShooterGameMode::BeginRun()
+{
 	for (AShooterTarget* T : Targets)
 	{
 		if (T) { T->ResetTarget(); }
@@ -73,12 +96,32 @@ void AShooterGameMode::StartStage()
 	StageTime = 0.f;
 	DisplayPoints = 0;
 	HitFactor = 0.f;
+	PlayerHealth = 100;
+	bFailed = false;
 	ResultText.Reset();
 	State = EStageState::Standby;
 
 	// USPSA-style random start delay before the buzzer.
 	const float Delay = FMath::FRandRange(1.0f, 2.5f);
 	GetWorldTimerManager().SetTimer(StandbyTimer, this, &AShooterGameMode::Beep, Delay, false);
+}
+
+void AShooterGameMode::PlayerHit(int32 Damage)
+{
+	if (State != EStageState::Running) { return; }
+	PlayerHealth -= Damage;
+	if (PlayerHealth <= 0)
+	{
+		PlayerHealth = 0;
+		FailStage();
+	}
+}
+
+void AShooterGameMode::FailStage()
+{
+	State = EStageState::Complete;
+	bFailed = true;
+	ResultText = FString::Printf(TEXT("YOU'RE HIT — STAGE FAILED\nTime  %.2fs"), StageTime);
 }
 
 void AShooterGameMode::Beep()
@@ -103,13 +146,15 @@ void AShooterGameMode::OnScoringHit()
 	int32 A, C, D, Miss, NS;
 	DisplayPoints = ComputeScore(false, A, C, D, Miss, NS);
 
-	// Stage is done when every paper has its two hits and every popper is down.
+	// Stage is done when every paper has its two hits, every popper is down,
+	// and the ranchero (if any) is on the ground.
 	bool bDone = true;
 	for (AShooterTarget* T : Targets)
 	{
 		if (!T) { continue; }
 		if (T->GetTargetType() == ETargetType::Paper && T->NumPaperHits() < 2) { bDone = false; break; }
 		if (T->GetTargetType() == ETargetType::Steel && !T->IsSteelDown()) { bDone = false; break; }
+		if (T->GetTargetType() == ETargetType::Enemy && !T->IsEnemyDown()) { bDone = false; break; }
 	}
 	if (bDone)
 	{
@@ -126,9 +171,14 @@ void AShooterGameMode::CompleteStage()
 	DisplayPoints = Pts;
 	HitFactor = FMath::Max(0, Pts) / FMath::Max(StageTime, 0.01f);
 
+	const bool bFinal = (CurrentStage == NumStages - 1);
+	const FString Header = bFinal
+		? TEXT("MATCH COMPLETE")
+		: FString::Printf(TEXT("STAGE %d of %d CLEAR"), CurrentStage + 1, NumStages);
+
 	ResultText = FString::Printf(
-		TEXT("Time  %.2fs\nA %d   C %d   D %d\nMisses %d   No-shoots %d\nPoints  %d\nHIT FACTOR  %.2f"),
-		StageTime, A, C, D, Miss, NS, Pts, HitFactor);
+		TEXT("%s\nTime  %.2fs\nA %d   C %d   D %d\nMisses %d   No-shoots %d\nPoints  %d\nHIT FACTOR  %.2f"),
+		*Header, StageTime, A, C, D, Miss, NS, Pts, HitFactor);
 }
 
 int32 AShooterGameMode::ComputeScore(bool bFinal, int32& OutA, int32& OutC, int32& OutD, int32& OutMiss, int32& OutNoShoot) const
@@ -158,6 +208,10 @@ int32 AShooterGameMode::ComputeScore(bool bFinal, int32& OutA, int32& OutC, int3
 		case ETargetType::NoShoot:
 			OutNoShoot += T->GetNoShootHits();
 			break;
+
+		case ETargetType::Enemy:
+			if (T->IsEnemyDown()) { Pts += 15; }
+			break;
 		}
 	}
 
@@ -171,15 +225,34 @@ FString AShooterGameMode::GetStatusText() const
 	switch (State)
 	{
 	case EStageState::PreStart:
-		return TEXT("USPSA SPEED STAGE\nEngage every target — best 2 hits on paper,\nknock the steel, avoid the white no-shoots.");
+		if (StageHasEnemy())
+		{
+			return FString::Printf(TEXT("STAGE %d of %d — THE OUTLAW\nA ranchero bandit moves and shoots back!\nPut him down, clear the paper & steel."),
+				CurrentStage + 1, NumStages);
+		}
+		return FString::Printf(TEXT("STAGE %d of %d — SPEED BAY\nEngage every target: best 2 hits on paper,\nknock the steel, avoid the white no-shoots."),
+			CurrentStage + 1, NumStages);
 	case EStageState::Standby:
 		return TEXT("STANDBY...");
 	case EStageState::Running:
 		return FString();
 	case EStageState::Complete:
-		return TEXT("STAGE COMPLETE");
+		return FString();
 	}
 	return FString();
+}
+
+FString AShooterGameMode::GetButtonLabel() const
+{
+	if (State != EStageState::Complete)
+	{
+		return TEXT("START");
+	}
+	if (bFailed)
+	{
+		return TEXT("RETRY STAGE");
+	}
+	return (CurrentStage < NumStages - 1) ? TEXT("NEXT STAGE") : TEXT("NEW MATCH");
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +300,21 @@ void AShooterGameMode::BuildArena()
 	SpawnLight(FRotator(-25.f, 120.f, 0.f), 5.f, FLinearColor(0.55f, 0.65f, 1.0f));
 	SpawnLight(FRotator(-88.f, 0.f, 0.f), 3.f, FLinearColor::White);
 
-	// Targets, arranged as a stage bay in front of the shooter (who starts at origin).
+	BuildStage(0);
+}
+
+void AShooterGameMode::BuildStage(int32 Index)
+{
+	UWorld* World = GetWorld();
+	if (!World) { return; }
+
+	// Tear down the previous stage's targets.
+	for (AShooterTarget* T : Targets)
+	{
+		if (T) { T->Destroy(); }
+	}
+	Targets.Reset();
+
 	auto SpawnTarget = [&](ETargetType Ty, const FVector& Loc)
 	{
 		// Face the shooter column at (0,0).
@@ -241,12 +328,34 @@ void AShooterGameMode::BuildArena()
 		}
 	};
 
-	// Closer, eye-height bay so targets frame well on a phone screen.
-	SpawnTarget(ETargetType::Paper,   FVector(520.f, -360.f, 150.f));
-	SpawnTarget(ETargetType::Paper,   FVector(560.f, -150.f, 150.f));
-	SpawnTarget(ETargetType::NoShoot, FVector(600.f, 0.f, 150.f));
-	SpawnTarget(ETargetType::Paper,   FVector(560.f, 160.f, 150.f));
-	SpawnTarget(ETargetType::Paper,   FVector(540.f, 370.f, 150.f));
-	SpawnTarget(ETargetType::Steel,   FVector(780.f, -250.f, 110.f));
-	SpawnTarget(ETargetType::Steel,   FVector(800.f, 250.f, 110.f));
+	if (Index == 0)
+	{
+		// Stage 1 — a static speed bay.
+		SpawnTarget(ETargetType::Paper,   FVector(520.f, -360.f, 150.f));
+		SpawnTarget(ETargetType::Paper,   FVector(560.f, -150.f, 150.f));
+		SpawnTarget(ETargetType::NoShoot, FVector(600.f, 0.f, 150.f));
+		SpawnTarget(ETargetType::Paper,   FVector(560.f, 160.f, 150.f));
+		SpawnTarget(ETargetType::Paper,   FVector(540.f, 370.f, 150.f));
+		SpawnTarget(ETargetType::Steel,   FVector(780.f, -250.f, 110.f));
+		SpawnTarget(ETargetType::Steel,   FVector(800.f, 250.f, 110.f));
+	}
+	else
+	{
+		// Stage 2 — fewer paper, plus a moving ranchero that shoots back.
+		SpawnTarget(ETargetType::Paper,   FVector(560.f, -420.f, 150.f));
+		SpawnTarget(ETargetType::Paper,   FVector(620.f, -230.f, 150.f));
+		SpawnTarget(ETargetType::NoShoot, FVector(640.f, 430.f, 150.f));
+		SpawnTarget(ETargetType::Steel,   FVector(820.f, 300.f, 110.f));
+		SpawnTarget(ETargetType::Enemy,   FVector(720.f, 80.f, 110.f));
+	}
+
+	// Fresh stage state.
+	State = EStageState::PreStart;
+	StageTime = 0.f;
+	DisplayPoints = 0;
+	HitFactor = 0.f;
+	PlayerHealth = 100;
+	bShowGo = false;
+	bFailed = false;
+	ResultText.Reset();
 }

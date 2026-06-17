@@ -11,8 +11,11 @@ enum class ETargetType : uint8
 {
 	Paper,    // scored A/C/D, best 2 hits count
 	NoShoot,  // penalty if hit
-	Steel     // knock-down popper, must fall
+	Steel,    // knock-down popper, must fall
+	Enemy     // moving wild-west ranchero that shoots back; must be put down
 };
+
+class AShooterProjectile;
 
 UCLASS()
 class SHOOTER3D_API AShooterTarget : public AActor
@@ -39,12 +42,24 @@ public:
 	int32 GetNoShootHits() const { return NoShootHits; }
 	bool IsSteelDown() const { return bDown; }
 
+	// --- enemy (ranchero) ---
+	bool IsEnemy() const { return Type == ETargetType::Enemy; }
+	bool IsEnemyDown() const { return bDown; }
+
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	void ApplyVisuals();
 	int32 ZoneValueForHit(const FHitResult& Hit) const;
 	void KnockDown();
+
+	/** Build the wild-west ranchero figure (poncho, sombrero, legs) from primitives. */
+	void BuildRanchero();
+	/** Per-frame enemy logic: strafe, face the player, and shoot back. */
+	void TickEnemy(float DeltaSeconds);
+	/** Tint a child component (its material must expose a "Color" param). */
+	void TintPart(UStaticMeshComponent* Part, const FLinearColor& Color);
 
 	/** Leave a visible bullet hole on the target face at the impact point. */
 	void SpawnHitMarker(const FVector& WorldImpact);
@@ -65,7 +80,17 @@ protected:
 	UPROPERTY()
 	TArray<UStaticMeshComponent*> HitMarkers;
 
+	/** Child meshes making up the ranchero figure. */
+	UPROPERTY()
+	TArray<UStaticMeshComponent*> Parts;
+
 	ETargetType Type = ETargetType::Paper;
+
+	// Enemy state.
+	int32 EnemyHP = 4;
+	float EnemyTime = 0.f;       // accumulated time for the strafe
+	float FireCountdown = 1.5f;  // seconds to next shot
+	FVector HomeLocation = FVector::ZeroVector;
 
 	/** Per-hit zone values (5/3/1) for paper targets. */
 	TArray<int32> HitValues;

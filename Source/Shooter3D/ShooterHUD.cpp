@@ -62,6 +62,24 @@ void AShooterHUD::BeginPlay()
 					return FText::FromString(FString::Printf(TEXT("PTS  %d"), G ? G->GetPoints() : 0));
 				})
 			]
+			// HEALTH — only on the stage with the outlaw.
+			+ SHorizontalBox::Slot().AutoWidth().Padding(20, 0)
+			[
+				SNew(STextBlock).Font(StatFont).ShadowOffset(FVector2D(2, 2))
+				.Visibility_Lambda([this]() {
+					AShooterGameMode* G = GameModeRef.Get();
+					return (G && G->StageHasEnemy()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+				})
+				.ColorAndOpacity_Lambda([this]() -> FSlateColor {
+					AShooterGameMode* G = GameModeRef.Get();
+					const int32 HP = G ? G->GetPlayerHealth() : 100;
+					return FSlateColor((HP > 40) ? FLinearColor(0.5f, 1.f, 0.5f) : FLinearColor(1.f, 0.4f, 0.3f));
+				})
+				.Text_Lambda([this]() {
+					AShooterGameMode* G = GameModeRef.Get();
+					return FText::FromString(FString::Printf(TEXT("HP  %d"), G ? G->GetPlayerHealth() : 100));
+				})
+			]
 		]
 
 		// --- Centre: status text + results + START/RUN-AGAIN button ---
@@ -109,7 +127,7 @@ void AShooterHUD::BeginPlay()
 					SNew(STextBlock).Font(BtnFont)
 					.Text_Lambda([this]() {
 						AShooterGameMode* G = GameModeRef.Get();
-						return FText::FromString((G && G->GetState() == EStageState::Complete) ? TEXT("RUN AGAIN") : TEXT("START"));
+						return FText::FromString(G ? G->GetButtonLabel() : FString(TEXT("START")));
 					})
 				]
 			]
