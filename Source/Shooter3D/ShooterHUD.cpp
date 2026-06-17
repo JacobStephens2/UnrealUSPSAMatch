@@ -38,6 +38,18 @@ void AShooterHUD::BeginPlay()
 			.Text_UObject(this, &AShooterHUD::GetScoreText)
 		]
 
+		// Control hint, bottom-centre.
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Center).VAlign(VAlign_Bottom)
+		.Padding(0, 0, 0, 24)
+		[
+			SNew(STextBlock)
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 20))
+			.ColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, 0.7f))
+			.ShadowOffset(FVector2D(1, 1))
+			.Text(FText::FromString(TEXT("Tap anywhere to shoot  •  drag corners to move / look")))
+		]
+
 		// FIRE button, bottom-right (thumb reach on a phone).
 		+ SOverlay::Slot()
 		.HAlign(HAlign_Right).VAlign(VAlign_Bottom)

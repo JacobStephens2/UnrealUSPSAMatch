@@ -39,6 +39,9 @@ protected:
 	void TurnRate(float Value);
 	void LookUpRate(float Value);
 
+	/** Tap anywhere outside the virtual-joystick zones to fire. */
+	void OnTouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
+
 	float FireTimer = 0.f;
 	float FireCooldown = 0.2f;
 };

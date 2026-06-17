@@ -64,6 +64,15 @@ void AShooterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AShooterCharacter::Fire);
 	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
+
+	// Tap-to-shoot: touches in the virtual-joystick zones are consumed by the
+	// sticks, so any other tap (the upper play area) lands here and fires.
+	PlayerInputComponent->BindTouch(IE_Pressed, this, &AShooterCharacter::OnTouchPressed);
+}
+
+void AShooterCharacter::OnTouchPressed(ETouchIndex::Type FingerIndex, FVector Location)
+{
+	Fire();
 }
 
 void AShooterCharacter::MoveForward(float Value)
