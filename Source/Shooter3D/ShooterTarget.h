@@ -46,12 +46,24 @@ protected:
 	int32 ZoneValueForHit(const FHitResult& Hit) const;
 	void KnockDown();
 
+	/** Leave a visible bullet hole on the target face at the impact point. */
+	void SpawnHitMarker(const FVector& WorldImpact);
+	/** Tint a paper target green once it has its required two hits. */
+	void MarkNeutralized();
+
+	/** Number of scoring hits a paper target needs (USPSA: two per target). */
+	static constexpr int32 RequiredHits = 2;
+
 	UPROPERTY()
 	UStaticMeshComponent* Mesh;
 
 	/** Dark central patch marking the A-zone on paper targets. */
 	UPROPERTY()
 	UStaticMeshComponent* AZoneMesh;
+
+	/** Runtime-spawned bullet-hole marks, so they can be cleared on reset. */
+	UPROPERTY()
+	TArray<UStaticMeshComponent*> HitMarkers;
 
 	ETargetType Type = ETargetType::Paper;
 

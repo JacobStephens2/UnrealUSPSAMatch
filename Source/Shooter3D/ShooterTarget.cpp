@@ -2,6 +2,7 @@
 #include "ShooterGameMode.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/SoundBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
@@ -104,12 +105,15 @@ void AShooterTarget::HandleHit(const FHitResult& Hit)
 	{
 	case ETargetType::Paper:
 		HitValues.Add(ZoneValueForHit(Hit));
+		SpawnHitMarker(Hit.ImpactPoint);
+		if (HitValues.Num() == RequiredHits) { MarkNeutralized(); }
 		if (PaperSound) { UGameplayStatics::PlaySoundAtLocation(this, PaperSound, Hit.ImpactPoint); }
 		GM->OnScoringHit();
 		break;
 
 	case ETargetType::NoShoot:
 		++NoShootHits;
+		SpawnHitMarker(Hit.ImpactPoint);
 		if (PaperSound) { UGameplayStatics::PlaySoundAtLocation(this, PaperSound, Hit.ImpactPoint); }
 		GM->OnScoringHit();
 		break;
@@ -144,6 +148,41 @@ int32 AShooterTarget::ZoneValueForHit(const FHitResult& Hit) const
 	return 1;     // D
 }
 
+void AShooterTarget::SpawnHitMarker(const FVector& WorldImpact)
+{
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (!Cube) { return; }
+
+	UStaticMeshComponent* Hole = NewObject<UStaticMeshComponent>(this);
+	if (!Hole) { return; }
+	Hole->SetStaticMesh(Cube);
+	Hole->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Hole->RegisterComponent();
+	Hole->AttachToComponent(Mesh, FAttachmentTransformRules::KeepWorldTransform);
+
+	// Sit just proud of the front face (local +X faces the shooter), aligned to the target.
+	const FVector Front = GetActorForwardVector();
+	Hole->SetWorldRotation(GetActorRotation());
+	Hole->SetWorldLocation(WorldImpact + Front * 0.6f);
+	Hole->SetWorldScale3D(FVector(0.06f, 0.075f, 0.075f)); // thin ~7cm disc
+
+	// Dark hole, clearly visible on tan cardboard (reuse the A-zone material).
+	if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_AZone.M_AZone")))
+	{
+		Hole->SetMaterial(0, M);
+	}
+	HitMarkers.Add(Hole);
+}
+
+void AShooterTarget::MarkNeutralized()
+{
+	// Green tint = "this paper target has its two hits" — readable across the bay.
+	if (UMaterialInstanceDynamic* Dyn = Mesh->CreateAndSetMaterialInstanceDynamic(0))
+	{
+		Dyn->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.18f, 0.62f, 0.24f));
+	}
+}
+
 void AShooterTarget::KnockDown()
 {
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -159,6 +198,14 @@ void AShooterTarget::ResetTarget()
 	SetActorRotation(InitialRotation);
 	Mesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+
+	// Clear bullet holes and restore the original (un-tinted) materials.
+	for (UStaticMeshComponent* Marker : HitMarkers)
+	{
+		if (Marker) { Marker->DestroyComponent(); }
+	}
+	HitMarkers.Empty();
+	ApplyVisuals();
 }
 
 int32 AShooterTarget::BestTwoSum() const
