@@ -34,6 +34,9 @@ protected:
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<AShooterProjectile> ProjectileClass;
 
+	UPROPERTY()
+	class USoundBase* FireSound = nullptr;
+
 	void MoveForward(float Value);
 	void MoveRight(float Value);
 	void TurnRate(float Value);

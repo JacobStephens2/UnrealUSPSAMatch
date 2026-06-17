@@ -6,6 +6,7 @@
 #include "ShooterHUD.generated.h"
 
 class SWidget;
+class AShooterGameMode;
 
 UCLASS()
 class SHOOTER3D_API AShooterHUD : public AHUD
@@ -15,8 +16,8 @@ class SHOOTER3D_API AShooterHUD : public AHUD
 protected:
 	virtual void BeginPlay() override;
 
-	FReply OnFireClicked();
-	FText GetScoreText() const;
+	FReply OnStartClicked();
 
 	TSharedPtr<SWidget> OverlayWidget;
+	TWeakObjectPtr<AShooterGameMode> GameModeRef;
 };

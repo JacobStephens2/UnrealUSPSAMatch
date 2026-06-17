@@ -4,6 +4,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Sound/SoundBase.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 
 AShooterCharacter::AShooterCharacter()
@@ -36,6 +38,12 @@ AShooterCharacter::AShooterCharacter()
 	GetCharacterMovement()->JumpZVelocity = 450.f;
 
 	ProjectileClass = AShooterProjectile::StaticClass();
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> ShotSound(TEXT("/Game/Audio/shot.shot"));
+	if (ShotSound.Succeeded())
+	{
+		FireSound = ShotSound.Object;
+	}
 }
 
 void AShooterCharacter::BeginPlay()
@@ -108,6 +116,11 @@ void AShooterCharacter::Fire()
 		return;
 	}
 	FireTimer = FireCooldown;
+
+	if (FireSound)
+	{
+		UGameplayStatics::PlaySound2D(this, FireSound);
+	}
 
 	const FRotator AimRot = Camera->GetComponentRotation();
 	const FVector MuzzleLoc = Camera->GetComponentLocation() + AimRot.Vector() * 80.f;

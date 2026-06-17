@@ -47,7 +47,7 @@ void AShooterProjectile::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 {
 	if (AShooterTarget* Target = Cast<AShooterTarget>(OtherActor))
 	{
-		Target->OnShot();
+		Target->HandleHit(Hit);
 	}
 	Destroy();
 }

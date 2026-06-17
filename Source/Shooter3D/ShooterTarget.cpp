@@ -2,6 +2,7 @@
 #include "ShooterGameMode.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Sound/SoundBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -11,45 +12,175 @@ AShooterTarget::AShooterTarget()
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
-	Mesh->SetRelativeScale3D(FVector(1.0f));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (CubeMesh.Succeeded())
-	{
-		Mesh->SetStaticMesh(CubeMesh.Object);
-	}
-
-	// Red material (the engine's BasicShapeMaterial has no color slot, so we use
-	// our own /Game/Materials/M_Target created with the material-authoring script).
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> RedMat(TEXT("/Game/Materials/M_Target.M_Target"));
-	if (RedMat.Succeeded())
-	{
-		Mesh->SetMaterial(0, RedMat.Object);
-	}
-
 	RootComponent = Mesh;
+
+	AZoneMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("AZoneMesh"));
+	AZoneMesh->SetupAttachment(Mesh);
+	AZoneMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> SteelSnd(TEXT("/Game/Audio/steel.steel"));
+	if (SteelSnd.Succeeded()) { SteelSound = SteelSnd.Object; }
+	static ConstructorHelpers::FObjectFinder<USoundBase> PaperSnd(TEXT("/Game/Audio/paper.paper"));
+	if (PaperSnd.Succeeded()) { PaperSound = PaperSnd.Object; }
 }
 
 void AShooterTarget::BeginPlay()
 {
 	Super::BeginPlay();
-	ArenaCenter = FVector(0.f, 0.f, 100.f);
-}
+	InitialRotation = GetActorRotation();
+	ApplyVisuals();
 
-void AShooterTarget::OnShot()
-{
 	if (AShooterGameMode* GM = Cast<AShooterGameMode>(UGameplayStatics::GetGameMode(this)))
 	{
-		GM->AddScore(1);
+		GM->RegisterTarget(this);
 	}
-	Relocate();
 }
 
-void AShooterTarget::Relocate()
+void AShooterTarget::ApplyVisuals()
 {
-	const float Range = 1200.f;
-	const FVector NewLoc = ArenaCenter + FVector(
-		FMath::FRandRange(-Range, Range),
-		FMath::FRandRange(-Range, Range),
-		FMath::FRandRange(0.f, 400.f));
-	SetActorLocation(NewLoc);
+	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	UStaticMesh* CylMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+
+	AZoneMesh->SetVisibility(false);
+
+	switch (Type)
+	{
+	case ETargetType::Paper:
+	{
+		// Thin upright cardboard target (local X = thin depth, Y = width, Z = height).
+		Mesh->SetStaticMesh(CubeMesh);
+		Mesh->SetWorldScale3D(FVector(0.1f, 0.55f, 0.85f));
+		HalfWidth = 0.55f * 50.f;
+		HalfHeight = 0.85f * 50.f;
+		if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Paper.M_Paper")))
+		{
+			Mesh->SetMaterial(0, M);
+		}
+
+		// Dark A-zone patch on the front face (local +X side, facing the shooter).
+		AZoneMesh->SetStaticMesh(CubeMesh);
+		AZoneMesh->SetVisibility(true);
+		AZoneMesh->SetWorldScale3D(FVector(0.12f, 0.55f * 0.45f, 0.85f * 0.5f));
+		AZoneMesh->SetRelativeLocation(FVector(6.f, 0.f, 0.f));
+		if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_AZone.M_AZone")))
+		{
+			AZoneMesh->SetMaterial(0, M);
+		}
+		break;
+	}
+	case ETargetType::NoShoot:
+	{
+		Mesh->SetStaticMesh(CubeMesh);
+		Mesh->SetWorldScale3D(FVector(0.1f, 0.55f, 0.85f));
+		if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_NoShoot.M_NoShoot")))
+		{
+			Mesh->SetMaterial(0, M);
+		}
+		break;
+	}
+	case ETargetType::Steel:
+	{
+		// Round popper on a stand.
+		Mesh->SetStaticMesh(CylMesh);
+		Mesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.95f));
+		if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Steel.M_Steel")))
+		{
+			Mesh->SetMaterial(0, M);
+		}
+		break;
+	}
+	}
+}
+
+void AShooterTarget::HandleHit(const FHitResult& Hit)
+{
+	AShooterGameMode* GM = Cast<AShooterGameMode>(UGameplayStatics::GetGameMode(this));
+	if (!GM || GM->GetState() != EStageState::Running)
+	{
+		return; // only score on the clock
+	}
+
+	switch (Type)
+	{
+	case ETargetType::Paper:
+		HitValues.Add(ZoneValueForHit(Hit));
+		if (PaperSound) { UGameplayStatics::PlaySoundAtLocation(this, PaperSound, Hit.ImpactPoint); }
+		GM->OnScoringHit();
+		break;
+
+	case ETargetType::NoShoot:
+		++NoShootHits;
+		if (PaperSound) { UGameplayStatics::PlaySoundAtLocation(this, PaperSound, Hit.ImpactPoint); }
+		GM->OnScoringHit();
+		break;
+
+	case ETargetType::Steel:
+		if (!bDown)
+		{
+			bDown = true;
+			if (SteelSound) { UGameplayStatics::PlaySoundAtLocation(this, SteelSound, GetActorLocation()); }
+			KnockDown();
+			GM->OnScoringHit();
+		}
+		break;
+	}
+}
+
+int32 AShooterTarget::ZoneValueForHit(const FHitResult& Hit) const
+{
+	// Hit point in the target's local frame; Y is across, Z is up.
+	const FVector Local = GetActorTransform().InverseTransformPosition(Hit.ImpactPoint);
+	const float FY = FMath::Abs(Local.Y) / FMath::Max(HalfWidth, 1.f);
+	const float FZ = FMath::Abs(Local.Z) / FMath::Max(HalfHeight, 1.f);
+
+	if (FY < 0.45f && FZ < 0.5f)
+	{
+		return 5; // A
+	}
+	if (FY < 0.9f && FZ < 0.95f)
+	{
+		return 3; // C
+	}
+	return 1;     // D
+}
+
+void AShooterTarget::KnockDown()
+{
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// Tip the popper over backwards.
+	SetActorRotation(InitialRotation + FRotator(80.f, 0.f, 0.f));
+}
+
+void AShooterTarget::ResetTarget()
+{
+	HitValues.Empty();
+	NoShootHits = 0;
+	bDown = false;
+	SetActorRotation(InitialRotation);
+	Mesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+}
+
+int32 AShooterTarget::BestTwoSum() const
+{
+	TArray<int32> Sorted = HitValues;
+	Sorted.Sort([](const int32& A, const int32& B) { return A > B; });
+	int32 Sum = 0;
+	for (int32 i = 0; i < Sorted.Num() && i < 2; ++i)
+	{
+		Sum += Sorted[i];
+	}
+	return Sum;
+}
+
+void AShooterTarget::CountBestTwoZones(int32& OutA, int32& OutC, int32& OutD) const
+{
+	TArray<int32> Sorted = HitValues;
+	Sorted.Sort([](const int32& A, const int32& B) { return A > B; });
+	for (int32 i = 0; i < Sorted.Num() && i < 2; ++i)
+	{
+		if (Sorted[i] == 5) ++OutA;
+		else if (Sorted[i] == 3) ++OutC;
+		else ++OutD;
+	}
 }
