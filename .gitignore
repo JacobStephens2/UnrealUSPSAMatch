@@ -1,0 +1,24 @@
+# Unreal Engine build artifacts / generated
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# Packaged output (the APK is >100MB; rebuild with the commands in README)
+Archive/
+
+# OS / editor cruft
+.DS_Store
+*.VC.db
+*.opensdf
+*.sdf
+*.suo
+.vs/
+.vscode/
+.idea/
+*.xcodeproj/
+*.xcworkspace/
+
+# build logs
+*.log
