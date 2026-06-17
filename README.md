@@ -3,6 +3,8 @@
 A small **3D first-person shooter** for Android, built with **Unreal Engine 5.7** in pure C++ — no
 external art assets (it uses only the engine's built-in primitive meshes).
 
+![Shooter 3D running on an Android emulator](docs/screenshot.png)
+
 ## Gameplay
 
 - First-person camera with a cube "gun"

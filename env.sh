@@ -1,7 +1,0 @@
-export UE="/Users/Shared/Epic Games/UE_5.7"
-export PROJ="$HOME/UnrealProjects/Shooter3D/Shooter3D.uproject"
-export ANDROID_HOME="/Users/admin/Library/Android/sdk"
-export ANDROID_NDK_ROOT="/Users/admin/Library/Android/sdk/ndk/27.2.12479018"
-export NDKROOT="$ANDROID_NDK_ROOT"
-export NDK_ROOT="$ANDROID_NDK_ROOT"
-export JAVA_HOME="/Applications/Unity/Hub/Editor/6000.0.77f1/PlaybackEngines/AndroidPlayer/OpenJDK"

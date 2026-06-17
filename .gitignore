@@ -22,3 +22,7 @@ Archive/
 
 # build logs
 *.log
+
+# scratch run captures
+/run_screenshot*.png
+env.sh

@@ -9,7 +9,6 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
-#include "UObject/ConstructorHelpers.h"
 
 AShooterGameMode::AShooterGameMode()
 {
@@ -31,8 +30,9 @@ void AShooterGameMode::BuildArena()
 		return;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	UStaticMesh* Cube = CubeFinder.Object;
+	// NOTE: ConstructorHelpers::FObjectFinder is ONLY valid inside a constructor.
+	// BuildArena() runs at StartPlay, so load the mesh at runtime with LoadObject.
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 
 	// --- Floor: a big flat scaled cube ---
 	if (Cube)
@@ -62,19 +62,31 @@ void AShooterGameMode::BuildArena()
 		Key->SetMobility(EComponentMobility::Movable);
 		if (UDirectionalLightComponent* DLC = Cast<UDirectionalLightComponent>(Key->GetLightComponent()))
 		{
-			DLC->SetIntensity(4.0f);
+			DLC->SetIntensity(10.0f);
+			DLC->SetLightColor(FLinearColor(1.0f, 0.97f, 0.9f));
 		}
 	}
 
-	// Dimmer, cool-toned fill from the opposite side so back faces aren't pure black.
+	// Cool-toned fill from the opposite side so back faces aren't pure black.
 	if (ADirectionalLight* Fill = World->SpawnActor<ADirectionalLight>(
-		FVector(0.f, 0.f, 2000.f), FRotator(-20.f, 120.f, 0.f)))
+		FVector(0.f, 0.f, 2000.f), FRotator(-25.f, 120.f, 0.f)))
 	{
 		Fill->SetMobility(EComponentMobility::Movable);
 		if (UDirectionalLightComponent* DLC = Cast<UDirectionalLightComponent>(Fill->GetLightComponent()))
 		{
-			DLC->SetIntensity(1.5f);
-			DLC->SetLightColor(FLinearColor(0.6f, 0.7f, 1.0f));
+			DLC->SetIntensity(5.0f);
+			DLC->SetLightColor(FLinearColor(0.55f, 0.65f, 1.0f));
+		}
+	}
+
+	// Overhead fill so the floor/tops aren't flat-dark (cheap stand-in for skylight ambient).
+	if (ADirectionalLight* Top = World->SpawnActor<ADirectionalLight>(
+		FVector(0.f, 0.f, 2000.f), FRotator(-88.f, 0.f, 0.f)))
+	{
+		Top->SetMobility(EComponentMobility::Movable);
+		if (UDirectionalLightComponent* DLC = Cast<UDirectionalLightComponent>(Top->GetLightComponent()))
+		{
+			DLC->SetIntensity(3.0f);
 		}
 	}
 
